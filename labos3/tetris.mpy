@@ -1,0 +1,287 @@
+from Bit import *
+#display, buttons etc. in Bit module
+import random
+
+import network
+import utime
+from utime import sleep_ms
+
+begin()
+
+
+
+sqrsize = 6
+size = width, height = sqrsize*14+2, sqrsize*20+2
+occupied_squares = []
+top_of_screen = (sqrsize+1,sqrsize-1)
+top_x, top_y = top_of_screen[0], top_of_screen[1]
+num_block = 4
+mov_delay, r_delay = 200, 50
+board_centre = int(width/2)
+screen_centre = 60
+no_move = 0
+score = 0
+shape_blcks = []
+shape_name = ""
+new_shape_blcks = []
+new_shape_name = ""
+occupied_squares = []
+gameOver = False
+
+def drawMenu():
+    global gameOver
+    gameOver = True
+    display.fill(0)
+    display.text(str("Tetris"), int(0), int(0), Display.Color.Yellow)
+
+    display.rect(int(90), int(0), int(26),int(6), Display.Color.Green, False)
+    display.text(str('A Start/Restart'), int(0), int(10), Display.Color.Yellow)
+    display.text(str('<- Left'), int(0), int(20), Display.Color.Yellow)
+    display.text(str('-> Right'), int(0), int(30), Display.Color.Yellow)
+    display.text(str('B Rotate'), int(0), int(40), Display.Color.Yellow)
+    display.commit()
+
+
+def newGameBoard():
+    global shape_blcks, shape_name, occupied_squares
+    shape_blcks = []
+    shape_name = ""
+    occupied_squares = []
+    display.fill(0)
+    display.rect(int(top_x-1), int(top_y-1), int(width), int(height), Display.Color.White, False)
+
+def createNewTetromino(start_x=board_centre, start_y=top_y):
+    global shape_blcks, shape_name, new_shape_blcks, new_shape_name
+    shape_blcks = new_shape_blcks
+    shape_name = new_shape_name
+
+    shape_names = ['Z', 'O', 'I', 'L', 'T']
+    shapes = {'Z':[(start_x + 1*sqrsize, start_y + 2*sqrsize),
+        (start_x, start_y), (start_x, start_y + 1*sqrsize),(start_x + 1*sqrsize,
+                                                    start_y + 1*sqrsize)],
+
+        'O':[(start_x + 1*sqrsize, start_y + 1*sqrsize), (start_x, start_y),
+            (start_x, start_y + 1*sqrsize), (start_x + 1*sqrsize, start_y)],
+
+        'I':[(start_x, start_y + 3*sqrsize), (start_x, start_y),
+            (start_x, start_y + 2*sqrsize), (start_x, start_y + 1*sqrsize)],
+
+        'L':[(start_x + 1*sqrsize, start_y + 2*sqrsize), (start_x, start_y),
+            (start_x, start_y + 2*sqrsize), (start_x, start_y + 1*sqrsize)],
+
+        'T':[(start_x + 1*sqrsize, start_y + 1*sqrsize),(start_x, start_y),
+            (start_x - 1*sqrsize, start_y + 1*sqrsize),(start_x,
+                                                        start_y + 1*sqrsize)]
+        }
+    a_shape = random.randint(0, 4)
+    new_shape_blcks = shapes[shape_names[a_shape]]
+    new_shape_name = shape_names[a_shape]
+    #shape_blcks = new_shape_blcks
+
+    display.rect(int(top_x+width+3), int(top_y+15), int(40), int(40), Display.Color.Black, True)
+    if isinstance(new_shape_blcks, list):
+        for blck in new_shape_blcks:
+            display.rect(int(blck[0]+60), int(blck[1]+15), int(sqrsize), int(sqrsize), Display.Color.Green, True)
+            display.rect(int(blck[0]+60), int(blck[1]+15), int(sqrsize), int(sqrsize), Display.Color.White, False)
+    else:
+        display.rect(int(new_shape_blcks[0+70]), int(new_shape_blcks[1]+15), int(sqrsize), int(sqrsize),Display.Color.Green, True)
+        display.rect(int(new_shape_blcks[0+70]), int(new_shape_blcks[1]+15), int(sqrsize), int(sqrsize),Display.Color.White, False)
+
+
+def drawScore():
+    global score
+    display.text(str('S:' + str(score)), int(top_x+width+3), int (3), Display.Color.Red)
+
+def legal(blcks):
+
+    for index in range(num_block):
+        new_x = blcks[index][0]
+        new_y = blcks[index][1]
+        if (((new_x, new_y) in occupied_squares or new_y >= height) or
+            (new_x >= width or new_x < top_x)):
+            return False
+
+    return True
+
+def updateTetromino():
+
+    #display.rect(int(40), int(top_y+15), int(60), int(40), Display.Color.Black, True)
+    # Erase the previous shape
+    '''
+    for blck in shape_blcks:
+        display.rect(int(blck[0]+40), int(blck[1]+15), int(sqrsize), int(sqrsize), Display.Color.Black, True)
+    '''
+    if isinstance(shape_blcks, list):
+        for blck in shape_blcks:
+            display.rect(int(blck[0]), int(blck[1]), int(sqrsize), int(sqrsize), Display.Color.Green, True)
+            display.rect(int(blck[0]), int(blck[1]), int(sqrsize), int(sqrsize), Display.Color.White, False)
+    else:
+        display.rect(int(shape_blcks[0]), int(shape_blcks[1]), int(sqrsize), int(sqrsize),Display.Color.Green, True)
+        display.rect(int(shape_blcks[0]), int(shape_blcks[1]), int(sqrsize), int(sqrsize),Display.Color.White, False)
+     
+def rotate():
+    if shape_name == 'O':
+        return shape_blcks
+    else:
+        #global no_move, occupied_squares, background
+
+        ref_shape_ind = 3 # index of block along which shape is rotated
+        start_x, start_y = (shape_blcks[ref_shape_ind][0],
+                            shape_blcks[ref_shape_ind][1])
+        save_blcks = shape_blcks
+        Rshape_blcks = [(start_x + start_y-shape_blcks[0][1],
+                        start_y - (start_x - shape_blcks[0][0])),
+        (start_x + start_y-shape_blcks[1][1],
+         start_y - (start_x - shape_blcks[1][0])),
+        (start_x + start_y-shape_blcks[2][1],
+         start_y - (start_x - shape_blcks[2][0])),
+        (shape_blcks[3][0], shape_blcks[3][1])]
+
+        if legal(Rshape_blcks):
+            for index in range(num_block): # erase the previous shape
+                display.rect(int(shape_blcks[index][0]), int(shape_blcks[index][1]),int(sqrsize), int(sqrsize), Display.Color.Black, True)
+            return Rshape_blcks
+        else:
+            return shape_blcks
+
+def move(direction):
+    global shape_blcks
+
+    directs = {'down':(no_move, sqrsize), 'left':(-sqrsize, no_move),
+        'right':(sqrsize, no_move), 'forcedown': (no_move, sqrsize*3)}
+    delta_x, delta_y = directs[direction]
+
+    for index in range(num_block):
+        shape_blcks[index] = [shape_blcks[index][0] + delta_x, shape_blcks[index][1]+ delta_y]
+
+    if legal(shape_blcks):
+        for index in range(num_block):
+            #erase previous positions of block
+            display.rect(int(shape_blcks[index][0]-delta_x), int(shape_blcks[index][1]-delta_y), int(sqrsize), int(sqrsize), Display.Color.Black, True)
+        updateTetromino() 
+        return True
+    else:
+        # undo the move, as it's not legal (being blocked by existing blocks)
+        for index in range(num_block):
+            shape_blcks[index] = [shape_blcks[index][0]-delta_x, shape_blcks[index][1]- delta_y]
+        return False
+
+def rotateTetromino():
+    global shape_blcks
+    shape_blcks = rotate()
+    updateTetromino()
+    #sleep_ms(r_delay)
+
+
+def moveRight():
+    direction = 'right'
+    moveTetromino(direction)
+
+def moveLeft():
+    direction = 'left'
+    moveTetromino(direction)
+
+def moveForceDown():
+    direction = 'forcedown'
+    moveTetromino(direction)
+
+
+def moveTetromino(direction):
+    #mov_delay = 50
+    move(direction)
+    #sleep_ms(mov_delay)
+
+def row_filled(row_no):
+    global occupied_squares
+    print("row_no", row_no)
+    for x_coord in range(top_x, width, sqrsize):
+        print("x cor ", x_coord)
+        if (x_coord, row_no) in occupied_squares:
+            continue
+        else:
+            return False
+    return True
+
+
+def delete_row(row_no):
+    global occupied_squares
+    display.fill(0)
+    display.rect(int(top_x-1), int(top_y-1), int(width), int(height), Display.Color.White, False)
+    new_buffer = []
+    x_coord, y_coord = 0, 1
+    for sqr in occupied_squares:
+        if sqr[y_coord] != row_no:
+            new_buffer.append(sqr)
+    occupied_squares = new_buffer
+    for index in range(len(occupied_squares)):
+        if occupied_squares[index][y_coord] < row_no:
+            occupied_squares[index] = (occupied_squares[index][x_coord],
+                                    occupied_squares[index][y_coord] + sqrsize)
+    for sqr in occupied_squares:
+        display.rect(int(sqr[x_coord]), int(sqr[y_coord]), int(sqrsize), int(sqrsize), Display.Color.Green, True)
+        display.rect(int(sqr[x_coord]), int(sqr[y_coord]), int(sqrsize), int(sqrsize), Display.Color.White, False)
+
+def startGame():
+    global score, gameOver
+    gameOver = False
+    score = 0
+    newGameBoard()
+    createNewTetromino()
+    while not gameOver:
+        drawScore()
+        createNewTetromino()
+        extramoves = 3
+        
+        if legal(shape_blcks):
+            updateTetromino()
+            print("shape blcks", shape_blcks)
+        else:
+            gameOver = True
+            break
+        
+        #one tetromino falling
+        while True:
+            move_dir = 'down'
+            mov_delay = 1
+
+            for i in range(0,200):
+                sleep_ms(mov_delay)
+                buttons.scan()
+            moved = move(move_dir)
+            
+
+            if not moved and move_dir == 'down':
+              extramoves = extramoves - 1
+              if extramoves <= 0 :
+                for block in shape_blcks:
+                    occupied_squares.append((block[0],block[1]))
+                break
+  
+
+            buttons.scan()
+            display.commit()
+
+        for row_no in range (top_y, height, sqrsize):
+            print("y:", top_y, "height:", height)
+            if row_filled(row_no):
+                print("filled row")
+                delete_row(row_no)
+                score+=10
+                drawScore() 
+        display.commit()
+
+    drawMenu()
+    buttons.scan()
+    display.commit()
+
+buttons.on_press(Buttons.C, drawMenu)
+buttons.on_press(Buttons.A, startGame)
+buttons.on_press(Buttons.B, rotateTetromino)
+
+buttons.on_press(Buttons.Right, moveRight)
+buttons.on_press(Buttons.Left, moveLeft)
+buttons.on_press(Buttons.Down, moveForceDown)
+
+drawMenu()
+while True:
+    buttons.scan()
